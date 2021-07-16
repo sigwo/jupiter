@@ -18,6 +18,7 @@ package nxt.http;
 
 import nxt.Order;
 import nxt.db.DbIterator;
+
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.JSONStreamAware;
@@ -29,7 +30,7 @@ public final class GetAccountCurrentBidOrders extends APIServlet.APIRequestHandl
     static final GetAccountCurrentBidOrders instance = new GetAccountCurrentBidOrders();
 
     private GetAccountCurrentBidOrders() {
-        super(new APITag[] {APITag.ACCOUNTS, APITag.AE}, "account", "asset", "firstIndex", "lastIndex");
+        super(new APITag[] {APITag.ACCOUNTS, APITag.AE}, "account", "includeNTFInfo", "asset", "firstIndex", "lastIndex");
     }
 
     @Override
@@ -39,6 +40,7 @@ public final class GetAccountCurrentBidOrders extends APIServlet.APIRequestHandl
         long assetId = ParameterParser.getUnsignedLong(req, "asset", false);
         int firstIndex = ParameterParser.getFirstIndex(req);
         int lastIndex = ParameterParser.getLastIndex(req);
+        boolean includeNTFInfo = "true".equalsIgnoreCase(req.getParameter("includeNTFInfo"));
 
         DbIterator<Order.Bid> bidOrders;
         if (assetId == 0) {
@@ -49,7 +51,7 @@ public final class GetAccountCurrentBidOrders extends APIServlet.APIRequestHandl
         JSONArray orders = new JSONArray();
         try {
             while (bidOrders.hasNext()) {
-                orders.add(JSONData.bidOrder(bidOrders.next()));
+                orders.add(JSONData.bidOrder(bidOrders.next(), includeNTFInfo));
             }
         } finally {
             bidOrders.close();

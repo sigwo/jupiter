@@ -29,6 +29,8 @@ import nxt.util.Listener;
 import nxt.util.Listeners;
 import nxt.util.Logger;
 import nxt.util.ThreadPool;
+import nxt.util.Time;
+
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.JSONStreamAware;
@@ -100,7 +102,7 @@ final class BlockchainProcessorImpl implements BlockchainProcessor {
     private volatile boolean isRestoring;
     private volatile boolean alreadyInitialized = false;
     private volatile long genesisBlockId;
-
+    
     private final Runnable getMoreBlocksThread = new Runnable() {
 
         private final JSONStreamAware getCumulativeDifficultyRequest;
@@ -1391,10 +1393,10 @@ final class BlockchainProcessorImpl implements BlockchainProcessor {
         if (!block.verifyBlockSignature()) {
             throw new BlockNotAcceptedException("Block signature verification failed", block);
         }
-        if (block.getTransactions().size() > Constants.MAX_NUMBER_OF_TRANSACTIONS) {
+        if (block.getTransactions().size() > getMaxNumberOfTransactions(previousLastBlock.getHeight())) {
             throw new BlockNotAcceptedException("Invalid block transaction count " + block.getTransactions().size(), block);
         }
-        if (block.getPayloadLength() > Constants.MAX_PAYLOAD_LENGTH || block.getPayloadLength() < 0) {
+        if (block.getPayloadLength() > getMaxPayloadLength(previousLastBlock.getHeight()) || block.getPayloadLength() < 0) {
             throw new BlockNotAcceptedException("Invalid block payload length " + block.getPayloadLength(), block);
         }
     }
@@ -1684,13 +1686,23 @@ final class BlockchainProcessorImpl implements BlockchainProcessor {
         }
         SortedSet<UnconfirmedTransaction> sortedTransactions = new TreeSet<>(transactionArrivalComparator);
         int payloadLength = 0;
-        while (payloadLength <= Constants.MAX_PAYLOAD_LENGTH && sortedTransactions.size() <= Constants.MAX_NUMBER_OF_TRANSACTIONS) {
+        
+        while (payloadLength <= getMaxPayloadLength(previousBlock.getHeight()) && 
+        		sortedTransactions.size() <= getMaxNumberOfTransactions(previousBlock.getHeight())) {
             int prevNumberOfNewTransactions = sortedTransactions.size();
+            
             for (UnconfirmedTransaction unconfirmedTransaction : orderedUnconfirmedTransactions) {
                 int transactionLength = unconfirmedTransaction.getTransaction().getFullSize();
-                if (sortedTransactions.contains(unconfirmedTransaction) || payloadLength + transactionLength > Constants.MAX_PAYLOAD_LENGTH) {
+                
+                if (sortedTransactions.contains(unconfirmedTransaction) || 
+                		payloadLength + transactionLength > getMaxPayloadLength(previousBlock.getHeight())) {
                     continue;
                 }
+                
+                if (sortedTransactions.size() >= getMaxNumberOfTransactions(previousBlock.getHeight())) {
+                	continue;
+                }
+                
                 if (unconfirmedTransaction.getVersion() != getTransactionVersion(previousBlock.getHeight())) {
                     continue;
                 }
@@ -1709,13 +1721,33 @@ final class BlockchainProcessorImpl implements BlockchainProcessor {
                 sortedTransactions.add(unconfirmedTransaction);
                 payloadLength += transactionLength;
             }
+            
             if (sortedTransactions.size() == prevNumberOfNewTransactions) {
                 break;
             }
         }
+        if (sortedTransactions.size() > 0) {
+        	Logger.logDebugMessage("Selected " + sortedTransactions.size() + " unconfirmed txs, payload " + payloadLength + ", pending " 
+        			+ (orderedUnconfirmedTransactions.size() - sortedTransactions.size()) + " to process");
+        }
         return sortedTransactions;
     }
-
+    
+    private int getMaxPayloadLength(int blockHeight) {
+    	if (blockHeight >= Constants.BLOCK_HEIGHT_HARD_FORK_TRANSACTION_PER_BLOCK) {
+    		return Constants.MAX_PAYLOAD_LENGTH;
+    	} else {
+    		return Constants.ORIGINAL_MAX_PAYLOAD_LENGTH;
+    	}
+    }
+    
+    private int getMaxNumberOfTransactions(int blockHeight) {
+    	if (blockHeight >= Constants.BLOCK_HEIGHT_HARD_FORK_TRANSACTION_PER_BLOCK) {
+    		return Constants.MAX_NUMBER_OF_TRANSACTIONS;
+    	} else {
+    		return Constants.ORIGINAL_MAX_NUMBER_OF_TRANSACTIONS;
+    	}
+    }
 
     private static final Comparator<UnconfirmedTransaction> transactionArrivalComparator = Comparator
             .comparingLong(UnconfirmedTransaction::getArrivalTimestamp)
@@ -1763,8 +1795,12 @@ final class BlockchainProcessorImpl implements BlockchainProcessor {
         try {
             pushBlock(block);
             blockListeners.notify(block, Event.BLOCK_GENERATED);
-            Logger.logDebugMessage("Account " + Long.toUnsignedString(block.getGeneratorId()) + " generated block " + block.getStringId()
-                    + " at height " + block.getHeight() + " timestamp " + block.getTimestamp() + " fee " + ((float)block.getTotalFeeNQT())/Constants.ONE_NXT);
+            Logger.logDebugMessage(" Account " + Long.toUnsignedString(block.getGeneratorId()) + " generated block " + block.getStringId()
+            		+ " after " + (block.getTimestamp() - previousBlock.getTimestamp()) + "s"
+                    + " height " + block.getHeight() 
+                    + " timestamp " + block.getTimestamp()+"("+Time.getDateTimeStringInfo(block.getTimestamp()) + ")" 
+                    + " fee " + ((float)block.getTotalFeeNQT())/Constants.ONE_NXT);
+            
         } catch (TransactionNotAcceptedException e) {
             Logger.logDebugMessage("Generate block failed: " + e.getMessage());
             TransactionProcessorImpl.getInstance().processWaitingTransactions();

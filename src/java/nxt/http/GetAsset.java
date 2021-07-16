@@ -16,7 +16,13 @@
 
 package nxt.http;
 
+import nxt.Asset;
+import nxt.Nxt;
 import nxt.NxtException;
+import nxt.Transaction;
+import nxt.util.Convert;
+
+import org.json.simple.JSONObject;
 import org.json.simple.JSONStreamAware;
 
 import javax.servlet.http.HttpServletRequest;
@@ -32,7 +38,18 @@ public final class GetAsset extends APIServlet.APIRequestHandler {
     @Override
     protected JSONStreamAware processRequest(HttpServletRequest req) throws NxtException {
         boolean includeCounts = "true".equalsIgnoreCase(req.getParameter("includeCounts"));
-        return JSONData.asset(ParameterParser.getAsset(req), includeCounts);
+        Asset asset = ParameterParser.getAsset(req);
+        JSONObject assetJson = JSONData.asset(asset, includeCounts);
+        
+        if (assetJson.containsKey("asset")){
+        	 Transaction transaction = Nxt.getBlockchain().getTransaction(asset.getId());
+        	 if (transaction != null && transaction.getMessage() != null) {
+     			String messageString = Convert.toString(transaction.getMessage().getMessage(), transaction.getMessage().isText());
+     			assetJson.put(MESSAGE_FIELD, messageString);
+     		}
+        }
+        
+        return assetJson;
     }
 
 }

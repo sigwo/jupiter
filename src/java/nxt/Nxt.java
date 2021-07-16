@@ -50,7 +50,7 @@ import java.util.Properties;
 
 public final class Nxt {
 
-    public static final String VERSION = "1.13.1";
+    public static final String VERSION = "2.2.1";
     public static final String APPLICATION = "JRS";
 
     private static volatile Time time = new Time.EpochTime();
@@ -201,6 +201,20 @@ public final class Nxt {
     public static int getIntProperty(String name, int defaultValue) {
         try {
             int result = Integer.parseInt(properties.getProperty(name));
+            Logger.logMessage(name + " = \"" + result + "\"");
+            return result;
+        } catch (NumberFormatException e) {
+            Logger.logMessage(name + " not defined or not numeric, using default value " + defaultValue);
+            return defaultValue;
+        }
+    }
+    
+    public static double getDoubleProperty(String name) {
+    	return getDoubleProperty(name, 1);
+    }
+    public static double getDoubleProperty(String name, double defaultValue) {
+        try {
+            double result = Double.parseDouble(properties.getProperty(name));
             Logger.logMessage(name + " = \"" + result + "\"");
             return result;
         } catch (NumberFormatException e) {
@@ -391,6 +405,7 @@ public final class Nxt {
                 Logger.logMessage("Copyright © 2013-2016 The Nxt Core Developers.");
                 Logger.logMessage("Copyright © 2016-2017 Jelurida IP B.V.");
                 Logger.logMessage("Copyright © 2016-2020 Sigwo Technologies");
+                Logger.logMessage("Copyright © 2020-2021 Jupiter Project Developers");
                 Logger.logMessage("Distributed under GPLv2, with ABSOLUTELY NO WARRANTY.");
                 if (API.getWelcomePageUri() != null) {
                     Logger.logMessage("Client UI is at " + API.getWelcomePageUri());
